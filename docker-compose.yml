@@ -1,0 +1,29 @@
+version: '3'
+services:
+  web: # django 컨테이너
+    image: server
+    container_name: web
+    command: bash -c "gunicorn trash_monitor.wsgi:application -b 0.0.0.0:8000" # 서버 실행
+    ports:
+      - "8000:8000"
+    restart: always
+    volumes:
+      - .:/app
+    networks:
+      - server
+
+  nginx: # nginx 컨테이너
+    image: nginx:latest
+    container_name: nginx
+    volumes:
+      - ./nginx.default.conf:/etc/nginx/conf.d/default.conf
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - web
+    networks:
+      - server
+
+networks:
+  server:
