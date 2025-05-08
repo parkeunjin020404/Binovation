@@ -2,7 +2,11 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .models import TrashStatus
+from django.db.models import Avg
 from .serializers import TrashStatusSerializer
+from django.db.models.functions import TruncDate
+from django.db.models import Count
+import datetime
 
 class TrashStatusView(APIView):
     def post(self, request):
@@ -50,3 +54,26 @@ class TrashStatusLatestView(APIView):
             "level": level,
             "status": status_msg
         }, status=status.HTTP_200_OK)
+
+class DeviceWeeklyAverageView(APIView):
+    def get(self, request, device_name):
+        today = datetime.date.today()
+        week_ago = today - datetime.timedelta(days=6)
+
+        data = (
+            TrashStatus.objects
+            .filter(device_name=device_name, date_time__date__range=(week_ago, today))
+            .annotate(date=TruncDate('date_time'))
+            .values('date')
+            .annotate(avg_fill=Avg('fill_percent'))
+            .order_by('date')
+        )
+
+        if not data:
+            return Response({"error": "No data found for device."}, status=status.HTTP_404_NOT_FOUND)
+
+        result = {
+            str(item['date']): round(item['avg_fill'], 1) for item in data
+        }
+
+        return Response(result)
