@@ -5,10 +5,9 @@ from .models import TrashStatus
 from django.db.models import Avg
 from .serializers import TrashStatusSerializer
 from django.db.models.functions import TruncDate
-from django.db.models import Count
 import datetime
 from django.db.models.functions import ExtractHour
-from django.db.models import Max
+from django.db.models import OuterRef, Subquery
 
 class TrashStatusView(APIView):
     def post(self, request):
@@ -119,62 +118,43 @@ class HourlyStatsYesterdayView(APIView):
     
 
 
-from django.db.models import Max
-
-from .models import TrashStatus
-
-from django.db.models import Max
-from .models import TrashStatus
 
 class LatestStatusAllDevicesView(APIView):
     def get(self, request):
-        try:
-            # 1. 각 device_name 별 최신 측정 시간 구하기
-            latest_dates = (
-                TrashStatus.objects
-                .values('device_name')
-                .annotate(latest_time=Max('date_time'))
-            )
+        latest_subquery = TrashStatus.objects.filter(
+            device_name=OuterRef('device_name')
+        ).order_by('-date_time')
 
-            latest_records = []
-            max_d = 65.0
-            min_d = 10.0
+        queryset = TrashStatus.objects.filter(
+            id__in=Subquery(latest_subquery.values('id')[:1])
+        )
 
-            for item in latest_dates:
-                entry = TrashStatus.objects.filter(
-                    device_name=item['device_name'],
-                    date_time=item['latest_time']
-                ).first()
+        max_d = 65.0
+        min_d = 10.0
+        result = []
 
-                # 예외 방어: 데이터가 없거나 distance가 None이면 skip
-                if not entry or entry.distance is None:
-                    continue
+        for entry in queryset:
+            d = entry.distance
+            if d is None:
+                continue
 
-                d = entry.distance
-                # fill_percent 계산 및 상태 분류
-                if d >= 800:
-                    fill = 0
-                    status_msg = "sensor_error"
-                elif d <= 10:
-                    fill = 100
-                    status_msg = "full"
-                else:
-                    try:
-                        raw = ((max_d - d) / (max_d - min_d)) * 100
-                        fill = int(max(0, min(raw, 100)) // 10 * 10)
-                        status_msg = "normal"
-                    except:
-                        continue  # 계산 오류 시 skip
+            if d >= 800:
+                fill = 0
+                status_msg = "sensor_error"
+            elif d <= 10:
+                fill = 100
+                status_msg = "full"
+            else:
+                raw = ((max_d - d) / (max_d - min_d)) * 100
+                fill = int(max(0, min(raw, 100)) // 10 * 10)
+                status_msg = "normal"
 
-                latest_records.append({
-                    "device_name": entry.device_name,
-                    "distance": entry.distance,
-                    "date_time": entry.date_time,
-                    "fill_percent": fill,
-                    "status": status_msg
-                })
+            result.append({
+                "device_name": entry.device_name,
+                "distance": entry.distance,
+                "date_time": entry.date_time,
+                "fill_percent": fill,
+                "status": status_msg
+            })
 
-            return Response(latest_records, status=200)
-
-        except Exception as e:
-            return Response({"error": str(e)}, status=500)
+        return Response(result)
