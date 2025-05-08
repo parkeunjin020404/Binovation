@@ -204,10 +204,9 @@ def calc_travel_time(bin1, bin2):
     return base + floor_gap
 
 class RouteRecommendationView(APIView):
-    def get(self, request):
-        start = request.query_params.get("start")
-        if not start:
-            return Response({"error": "start parameter required"}, status=400)
+    def get(self, request, start):  # ✅ 인자 추가됨
+        # 기존에는 request.query_params.get("start") 였던 부분 제거
+        # start가 path param으로 바로 들어옴
 
         # 최신 상태만 추출
         latest = TrashStatus.objects.values('device_name').annotate(latest=Max('date_time'))
@@ -237,7 +236,6 @@ class RouteRecommendationView(APIView):
         start_bin = next(b for b in bins if b["device_name"] == start)
         remaining = [b for b in bins if b["device_name"] != start]
 
-        # 경로 계산
         route = [start_bin]
         while remaining:
             current = route[-1]
