@@ -8,6 +8,7 @@ from django.db.models.functions import TruncDate
 from django.db.models import Count
 import datetime
 from django.db.models.functions import ExtractHour
+from django.db.models import Max
 
 class TrashStatusView(APIView):
     def post(self, request):
@@ -115,3 +116,47 @@ class HourlyStatsYesterdayView(APIView):
             result[hour] = max(0, min(round(fill, 1), 100))
 
         return Response(result)
+    
+
+
+class LatestStatusAllDevicesView(APIView):
+    def get(self, request):
+        # Step 1: 각 device_name별로 가장 최근 date_time 찾기
+        latest_dates = (
+            TrashStatus.objects
+            .values('device_name')
+            .annotate(latest_time=Max('date_time'))
+        )
+
+        # Step 2: 해당 시간에 맞는 실제 데이터 가져오기
+        latest_records = []
+        for item in latest_dates:
+            entry = TrashStatus.objects.filter(
+                device_name=item['device_name'],
+                date_time=item['latest_time']
+            ).first()
+
+            # 채움률 계산
+            max_d = 65.0
+            min_d = 10.0
+            d = entry.distance
+            if d >= 800:
+                fill = 0
+                status = "sensor_error"
+            elif d <= 10:
+                fill = 100
+                status = "full"
+            else:
+                raw = ((max_d - d) / (max_d - min_d)) * 100
+                fill = int(max(0, min(raw, 100)) // 10 * 10)
+                status = "normal"
+
+            latest_records.append({
+                "device_name": entry.device_name,
+                "distance": entry.distance,
+                "date_time": entry.date_time,
+                "fill_percent": fill,
+                "status": status
+            })
+
+        return Response(latest_records)
