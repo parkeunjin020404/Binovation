@@ -7,4 +7,5 @@ urlpatterns = [
     path('weekly-average/<str:device_name>/', DeviceWeeklyAverageView.as_view(), name='device-weekly-average'),
     path('yesterday-hourly/<str:device_name>/', HourlyStatsYesterdayView.as_view(), name='yesterday-hourly'),
     path('latest-all/', LatestStatusAllDevicesView.as_view(), name='latest-all'),
+    path('route/', RouteRecommendationView.as_view(), name='route'),
 ]   
