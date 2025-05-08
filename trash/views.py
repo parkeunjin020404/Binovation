@@ -119,26 +119,31 @@ class HourlyStatsYesterdayView(APIView):
     
 
 
-from django.db.models import OuterRef, Subquery
+from django.db.models import Max
+
 from .models import TrashStatus
 
 class LatestStatusAllDevicesView(APIView):
     def get(self, request):
-        latest_per_device = TrashStatus.objects.filter(
-            device_name=OuterRef('device_name')
-        ).order_by('-date_time')
-
-        queryset = TrashStatus.objects.filter(
-            id__in=Subquery(
-                latest_per_device.values('id')[:1]
-            )
+        latest_dates = (
+            TrashStatus.objects
+            .values('device_name')
+            .annotate(latest_time=Max('date_time'))
         )
 
-        max_d = 65.0
-        min_d = 10.0
-        result = []
+        latest_records = []
+        for item in latest_dates:
+            entry = TrashStatus.objects.filter(
+                device_name=item['device_name'],
+                date_time=item['latest_time']
+            ).first()
 
-        for entry in queryset:
+            if not entry:
+                continue  # 🔑 entry가 None이면 건너뜀
+
+            # 채움률 계산
+            max_d = 65.0
+            min_d = 10.0
             d = entry.distance
             if d >= 800:
                 fill = 0
@@ -151,7 +156,7 @@ class LatestStatusAllDevicesView(APIView):
                 fill = int(max(0, min(raw, 100)) // 10 * 10)
                 status = "normal"
 
-            result.append({
+            latest_records.append({
                 "device_name": entry.device_name,
                 "distance": entry.distance,
                 "date_time": entry.date_time,
@@ -159,4 +164,4 @@ class LatestStatusAllDevicesView(APIView):
                 "status": status
             })
 
-        return Response(result)
+        return Response(latest_records)
