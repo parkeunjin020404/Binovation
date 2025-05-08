@@ -7,6 +7,7 @@ from .serializers import TrashStatusSerializer
 from django.db.models.functions import TruncDate
 from django.db.models import Count
 import datetime
+from django.db.models.functions import ExtractHour
 
 class TrashStatusView(APIView):
     def post(self, request):
@@ -83,5 +84,34 @@ class DeviceWeeklyAverageView(APIView):
             raw_fill = ((max_d - avg_d) / (max_d - min_d)) * 100
             fill_percent = max(0, min(round(raw_fill, 1), 100))  # 0~100 범위 제한
             result[str(item['date'])] = fill_percent
+
+        return Response(result)
+    
+class HourlyStatsYesterdayView(APIView):
+    def get(self, request, device_name):
+        today = datetime.date.today()
+        yesterday = today - datetime.timedelta(days=1)
+
+        data = (
+            TrashStatus.objects
+            .filter(device_name=device_name, date_time__date=yesterday)
+            .annotate(hour=ExtractHour('date_time'))
+            .values('hour')
+            .annotate(avg_distance=Avg('distance'))
+            .order_by('hour')
+        )
+
+        if not data:
+            return Response({"error": "No data for this device on yesterday."}, status=status.HTTP_404_NOT_FOUND)
+
+        max_d = 65.0
+        min_d = 10.0
+        result = {}
+
+        for item in data:
+            hour = str(item['hour']).zfill(2)
+            d = item['avg_distance']
+            fill = ((max_d - d) / (max_d - min_d)) * 100
+            result[hour] = max(0, min(round(fill, 1), 100))
 
         return Response(result)
