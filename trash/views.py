@@ -121,25 +121,17 @@ class HourlyStatsYesterdayView(APIView):
 
 class LatestStatusAllDevicesView(APIView):
     def get(self, request):
-        # 1. 각 device_name 별 최신 date_time 구함
-        latest_by_device = (
-            TrashStatus.objects
-            .values('device_name')
-            .annotate(latest_time=Max('date_time'))
-        )
-
+        devices = TrashStatus.objects.values_list('device_name', flat=True).distinct()
         result = []
-        max_d = 65.0
-        min_d = 10.0
+        max_d, min_d = 65.0, 10.0
 
-        for item in latest_by_device:
-            device_name = item['device_name']
-            latest_time = item['latest_time']
-
-            entry = TrashStatus.objects.filter(
-                device_name=device_name,
-                date_time=latest_time
-            ).order_by('-id').first()  # 같은 시간 여러개 있을 수도 있음
+        for device in devices:
+            entry = (
+                TrashStatus.objects
+                .filter(device_name=device)
+                .order_by('-date_time')
+                .first()
+            )
 
             if not entry or entry.distance is None:
                 continue
@@ -147,21 +139,21 @@ class LatestStatusAllDevicesView(APIView):
             d = entry.distance
             if d >= 800:
                 fill = 0
-                status = "sensor_error"
+                status_msg = "sensor_error"
             elif d <= 10:
                 fill = 100
-                status = "full"
+                status_msg = "full"
             else:
                 raw = ((max_d - d) / (max_d - min_d)) * 100
                 fill = int(max(0, min(raw, 100)) // 10 * 10)
-                status = "normal"
+                status_msg = "normal"
 
             result.append({
                 "device_name": entry.device_name,
                 "distance": entry.distance,
                 "date_time": entry.date_time,
                 "fill_percent": fill,
-                "status": status
+                "status": status_msg
             })
 
         return Response(result)
