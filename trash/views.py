@@ -157,3 +157,100 @@ class LatestStatusAllDevicesView(APIView):
             })
 
         return Response(result)
+    
+from django.db.models import Max
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from trash.models import TrashStatus  # ← 실제 앱/모델명 맞게 수정하세요
+
+building_name_map = {
+    'Lib': '도서관',
+    'SocSci': '사회과학관',
+    'Human': '인문과학관',
+    'Cyber': '사이버관',
+    'CDI': '교수개발원'
+}
+
+building_travel_time = {
+    '사회과학관': {'도서관': 2, '사이버관': 4, '인문과학관': 6, '교수개발원': 7},
+    '도서관': {'사회과학관': 2, '사이버관': 2, '인문과학관': 8, '교수개발원': 9},
+    '사이버관': {'사회과학관': 4, '도서관': 2, '인문과학관': 10, '교수개발원': 11},
+    '인문과학관': {'사회과학관': 6, '도서관': 8, '사이버관': 10, '교수개발원': 0.5},
+    '교수개발원': {'사회과학관': 7, '도서관': 9, '사이버관': 11, '인문과학관': 0.5}
+}
+
+FLOOR_TIME = 0.5
+
+def parse_bin_name(device_name):
+    code, floor = device_name.split('_floor')
+    return code, int(floor)
+
+def calc_fill(distance):
+    if distance >= 800:
+        return None
+    elif distance <= 10:
+        return 100
+    else:
+        raw = ((65 - distance) / (65 - 10)) * 100
+        return int(max(0, min(raw, 100)) // 10 * 10)
+
+def calc_travel_time(bin1, bin2):
+    code1, floor1 = parse_bin_name(bin1["device_name"])
+    code2, floor2 = parse_bin_name(bin2["device_name"])
+    bldg1 = building_name_map[code1]
+    bldg2 = building_name_map[code2]
+    base = building_travel_time[bldg1][bldg2]
+    floor_gap = abs(floor1 - floor2) * FLOOR_TIME
+    return base + floor_gap
+
+class RouteRecommendationView(APIView):
+    def get(self, request):
+        start = request.query_params.get("start")
+        if not start:
+            return Response({"error": "start parameter required"}, status=400)
+
+        # 최신 상태만 추출
+        latest = TrashStatus.objects.values('device_name').annotate(latest=Max('date_time'))
+
+        bins = []
+        for row in latest:
+            entry = TrashStatus.objects.filter(
+                device_name=row['device_name'],
+                date_time=row['latest']
+            ).first()
+
+            if not entry or entry.distance is None:
+                continue
+
+            fill = calc_fill(entry.distance)
+            if fill is None or fill < 80:
+                continue
+
+            bins.append({
+                "device_name": entry.device_name,
+                "fill_percent": fill
+            })
+
+        if not any(b["device_name"] == start for b in bins):
+            bins.insert(0, {"device_name": start, "fill_percent": 0})
+
+        start_bin = next(b for b in bins if b["device_name"] == start)
+        remaining = [b for b in bins if b["device_name"] != start]
+
+        # 경로 계산
+        route = [start_bin]
+        while remaining:
+            current = route[-1]
+            next_bin = min(remaining, key=lambda b: calc_travel_time(current, b))
+            route.append(next_bin)
+            remaining.remove(next_bin)
+
+        result = [
+            {
+                "device_name": b["device_name"],
+                "fill_percent": b["fill_percent"],
+                "order": i + 1
+            }
+            for i, b in enumerate(route)
+        ]
+        return Response(result)
