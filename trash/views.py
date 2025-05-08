@@ -60,20 +60,28 @@ class DeviceWeeklyAverageView(APIView):
         today = datetime.date.today()
         week_ago = today - datetime.timedelta(days=6)
 
+        # 1. 날짜별 평균 distance 계산
         data = (
             TrashStatus.objects
             .filter(device_name=device_name, date_time__date__range=(week_ago, today))
             .annotate(date=TruncDate('date_time'))
             .values('date')
-            .annotate(avg_fill=Avg('fill_percent'))
+            .annotate(avg_distance=Avg('distance'))
             .order_by('date')
         )
 
         if not data:
-            return Response({"error": "No data found for device."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "No data found for this device."}, status=status.HTTP_404_NOT_FOUND)
 
-        result = {
-            str(item['date']): round(item['avg_fill'], 1) for item in data
-        }
+        # 2. 평균 distance → fill_percent 수식 적용
+        max_d = 65.0
+        min_d = 10.0
+        result = {}
+
+        for item in data:
+            avg_d = item['avg_distance']
+            raw_fill = ((max_d - avg_d) / (max_d - min_d)) * 100
+            fill_percent = max(0, min(round(raw_fill, 1), 100))  # 0~100 범위 제한
+            result[str(item['date'])] = fill_percent
 
         return Response(result)
