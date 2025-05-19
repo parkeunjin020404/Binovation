@@ -318,7 +318,7 @@ class WeeklyAverageAllDevicesView(APIView):
         max_d = 65.0
         min_d = 10.0
 
-        # Step 1. 해당 기간 모든 장비의 측정값 조회
+        # Step 1. 일주일치 모든 디바이스의 날짜별 평균 distance 조회
         data = (
             TrashStatus.objects
             .filter(date_time__date__range=(week_ago, today))
@@ -331,7 +331,7 @@ class WeeklyAverageAllDevicesView(APIView):
         if not data:
             return Response({"error": "No data found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Step 2. 기기별로 정리
+        # Step 2. 기기별 fill_percent 계산 및 그룹핑
         result = {}
 
         for item in data:
