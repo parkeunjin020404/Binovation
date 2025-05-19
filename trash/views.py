@@ -345,3 +345,41 @@ class WeeklyAverageAllDevicesView(APIView):
             result[name][str(item['date'])] = fill_percent
 
         return Response(result)
+
+
+class HourlyStatsYesterdayAllDevicesView(APIView):
+    def get(self, request):
+        today = datetime.today().date()
+        yesterday = today - timedelta(days=1)
+
+        max_d = 65.0
+        min_d = 10.0
+
+        # Step 1. 전체 기기의 시간별 평균 distance
+        data = (
+            TrashStatus.objects
+            .filter(date_time__date=yesterday)
+            .annotate(hour=ExtractHour('date_time'))
+            .values('device_name', 'hour')
+            .annotate(avg_distance=Avg('distance'))
+            .order_by('device_name', 'hour')
+        )
+
+        if not data:
+            return Response({"error": "No data found for any device on yesterday."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Step 2. 기기별 fill_percent 계산 및 그룹화
+        result = {}
+
+        for item in data:
+            device = item['device_name']
+            hour = str(item['hour']).zfill(2)
+            d = item['avg_distance']
+            fill = ((max_d - d) / (max_d - min_d)) * 100
+            fill = max(0, min(round(fill, 1), 100))
+
+            if device not in result:
+                result[device] = {}
+            result[device][hour] = fill
+
+        return Response(result)
