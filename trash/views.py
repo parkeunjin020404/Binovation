@@ -9,6 +9,7 @@ import datetime
 from django.db.models.functions import ExtractHour
 from django.db.models import OuterRef, Subquery
 from django.db.models import Max
+from datetime import datetime, timedelta
 class TrashStatusView(APIView):
     def post(self, request):
         serializer = TrashStatusSerializer(data=request.data)
@@ -308,3 +309,39 @@ class RouteRecommendationView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+class WeeklyAverageAllDevicesView(APIView):
+    def get(self, request):
+        today = datetime.today().date()
+        week_ago = today - timedelta(days=6)
+
+        max_d = 65.0
+        min_d = 10.0
+
+        # Step 1. 해당 기간 모든 장비의 측정값 조회
+        data = (
+            TrashStatus.objects
+            .filter(date_time__date__range=(week_ago, today))
+            .annotate(date=TruncDate('date_time'))
+            .values('device_name', 'date')
+            .annotate(avg_distance=Avg('distance'))
+            .order_by('device_name', 'date')
+        )
+
+        if not data:
+            return Response({"error": "No data found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Step 2. 기기별로 정리
+        result = {}
+
+        for item in data:
+            name = item['device_name']
+            avg_d = item['avg_distance']
+            raw_fill = ((max_d - avg_d) / (max_d - min_d)) * 100
+            fill_percent = max(0, min(round(raw_fill, 1), 100))
+
+            if name not in result:
+                result[name] = {}
+            result[name][str(item['date'])] = fill_percent
+
+        return Response(result)
