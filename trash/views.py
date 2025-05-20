@@ -328,8 +328,8 @@ class EmergencyAlertView(APIView):
                 fill = 100
             else:
                 fill = round(((65 - d) / (65 - 10)) * 100, 1)
-
-            if fill >= 90:
+ 
+            if fill >= 80:
                 status_msg = None if fill == 100 else "30분 이내에 수거해 주세요!"
                 bins.append({
                     "device_name": entry.device_name,
