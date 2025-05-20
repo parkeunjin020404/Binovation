@@ -306,62 +306,34 @@ from django.db.models import Max
 
 class EmergencyAlertView(APIView):
     def get(self, request):
-        # DB에서 가장 최신 날짜 가져오기
-        latest_dt = TrashStatus.objects.aggregate(latest=Max("date_time"))["latest"]
-        if not latest_dt:
-            return Response([], status=200)
+        # 디바이스별 가장 최근 데이터 추출
+        latest_per_device = (
+            TrashStatus.objects
+            .values('device_name')
+            .annotate(latest_time=Max('date_time'))
+        )
 
-        latest_date = latest_dt.date()
-        one_hour_ago = latest_dt - timedelta(hours=1)
-
-        qs_today = TrashStatus.objects.filter(date_time__date=latest_date)
-        predictions = []
-
-        devices = qs_today.values_list("device_name", flat=True).distinct()
-        for device in devices:
-            device_qs = qs_today.filter(device_name=device).order_by("date_time")
-            recent_qs = device_qs.filter(date_time__gte=one_hour_ago)
-
-            if recent_qs.count() < 2:
+        bins = []
+        for row in latest_per_device:
+            entry = TrashStatus.objects.filter(
+                device_name=row['device_name'],
+                date_time=row['latest_time']
+            ).first()
+            if not entry:
                 continue
 
-            latest_entry = device_qs.last()
-            d_now = latest_entry.distance
-            t_start = recent_qs.first().date_time
-            d_start = recent_qs.first().distance
-            t_end = recent_qs.last().date_time
-            d_end = recent_qs.last().distance
+            d = entry.distance
+            if d <= 10 or d >= 800:
+                fill = 100
+            else:
+                fill = round(((65 - d) / (65 - 10)) * 100, 1)
 
-            delta_d = d_start - d_end
-            delta_min = (t_end - t_start).total_seconds() / 60
-            rate = delta_d / delta_min if delta_min > 0 else 0
+            bins.append({
+                "device_name": entry.device_name,
+                "current_fill": fill,
+                "status": None if fill == 100 else "상대적으로 우선 수거 필요"
+            })
 
-            def calc_fill(d):
-                if d <= 10 or d >= 800:
-                    return 100
-                return round(((65 - d) / (65 - 10)) * 100, 1)
-
-            fill_now = calc_fill(d_now)
-
-            if fill_now == 100:
-                predictions.append({
-                    "device_name": device,
-                    "current_fill": fill_now,
-                    "status": None
-                })
-            elif rate > 0:
-                minutes_to_full = (d_now - 10) / rate
-                if minutes_to_full <= 30:
-                    msg = "30분 내에 수거 추천드려요!"
-                elif minutes_to_full <= 60:
-                    msg = "1시간 내에 가득 찰 예정입니다!"
-                else:
-                    continue
-                predictions.append({
-                    "device_name": device,
-                    "current_fill": fill_now,
-                    "status": msg
-                })
-
-        top6 = sorted(predictions, key=lambda x: x["current_fill"], reverse=True)[:6]
-        return Response(top6, status=200)
+        # fill_percent 기준 상위 6개만 추출
+        top6 = sorted(bins, key=lambda x: x["current_fill"], reverse=True)[:6]
+        return Response(top6, status=status.HTTP_200_OK)
