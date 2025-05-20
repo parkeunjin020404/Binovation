@@ -306,19 +306,20 @@ from django.db.models import Max
 
 class EmergencyAlertView(APIView):
     def get(self, request):
-        # 디바이스별 가장 최근 데이터 추출
-        latest_per_device = (
+        # 디바이스별 최신 데이터
+        latest_data = (
             TrashStatus.objects
             .values('device_name')
             .annotate(latest_time=Max('date_time'))
         )
 
         bins = []
-        for row in latest_per_device:
+        for row in latest_data:
             entry = TrashStatus.objects.filter(
                 device_name=row['device_name'],
                 date_time=row['latest_time']
             ).first()
+
             if not entry:
                 continue
 
@@ -328,12 +329,13 @@ class EmergencyAlertView(APIView):
             else:
                 fill = round(((65 - d) / (65 - 10)) * 100, 1)
 
-            bins.append({
-                "device_name": entry.device_name,
-                "current_fill": fill,
-                "status": None if fill == 100 else "상대적으로 우선 수거 필요"
-            })
+            if fill >= 90:
+                status_msg = None if fill == 100 else "30분 이내에 수거해 주세요!"
+                bins.append({
+                    "device_name": entry.device_name,
+                    "current_fill": fill,
+                    "status": status_msg
+                })
 
-        # fill_percent 기준 상위 6개만 추출
         top6 = sorted(bins, key=lambda x: x["current_fill"], reverse=True)[:6]
         return Response(top6, status=status.HTTP_200_OK)
