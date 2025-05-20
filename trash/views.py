@@ -13,12 +13,14 @@ from datetime import datetime, timedelta
 from .utils import *
 class TrashStatusView(APIView):
     def post(self, request):
-        serializer = TrashStatusSerializer(data=request.data)
+        # 리스트로 온 경우: many=True
+        is_many = isinstance(request.data, list)
+
+        serializer = TrashStatusSerializer(data=request.data, many=is_many)
         if serializer.is_valid():
             serializer.save()
             return Response({"message": "Data saved successfully"}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class TrashStatusLatestView(APIView):
     def get(self, request, device_name):
