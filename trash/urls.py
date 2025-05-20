@@ -3,6 +3,7 @@ from .views import *
 
 urlpatterns = [
     path('post/', TrashStatusView.as_view(), name='trash_status_post'),
+    path('emergency/', EmergencyAlertView.as_view(), name='emergency-alert'),
     path('weekly-average/<str:device_name>/', DeviceWeeklyAverageView.as_view(), name='device-weekly-average'),
     path('weekly-average/', WeeklyAverageAllDevicesView.as_view(), name='weekly-average-all'),
     path('yesterday-hourly/all/', HourlyStatsYesterdayAllDevicesView.as_view(), name='hourly-stats-all'),
