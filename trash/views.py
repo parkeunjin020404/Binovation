@@ -294,3 +294,74 @@ class HourlyStatsYesterdayAllDevicesView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+        
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .models import TrashStatus
+from django.utils.timezone import now
+from datetime import timedelta
+from django.db.models import Max
+
+class EmergencyAlertView(APIView):
+    def get(self, request):
+        today = now().date()
+        df_today = TrashStatus.objects.filter(date_time__date=today)
+
+        latest_time = df_today.aggregate(latest=Max("date_time"))["latest"]
+        if not latest_time:
+            return Response([], status=200)
+
+        one_hour_ago = latest_time - timedelta(hours=1)
+        predictions = []
+
+        devices = df_today.values_list("device_name", flat=True).distinct()
+        for device in devices:
+            device_qs = df_today.filter(device_name=device).order_by("date_time")
+            recent_qs = device_qs.filter(date_time__gte=one_hour_ago)
+
+            if recent_qs.count() < 2:
+                continue
+
+            latest_entry = device_qs.last()
+            d_now = latest_entry.distance
+            t_start, d_start = recent_qs.first().date_time, recent_qs.first().distance
+            t_end, d_end = recent_qs.last().date_time, recent_qs.last().distance
+
+            delta_d = d_start - d_end
+            delta_min = (t_end - t_start).total_seconds() / 60
+            rate = delta_d / delta_min if delta_min > 0 else 0.0  # cm/min
+
+            def calc_fill(d):
+                if d <= 10 or d >= 800:
+                    return 100
+                return round(((65 - d) / (65 - 10)) * 100, 1)
+
+            fill_now = calc_fill(d_now)
+
+            # 100%는 상태 없이 바로 추가
+            if fill_now == 100:
+                predictions.append({
+                    "device_name": device,
+                    "current_fill": fill_now,
+                    "status": None
+                })
+            elif rate > 0:
+                # 거리 기준으로 10cm까지 도달 예상 시간
+                minutes_to_full = (d_now - 10) / rate
+                if minutes_to_full <= 30:
+                    msg = "30분 내에 수거 추천드려요!"
+                elif minutes_to_full <= 60:
+                    msg = "1시간 내에 가득 찰 예정입니다!"
+                else:
+                    continue  # 1시간 이상 걸리면 긴급 아님
+                predictions.append({
+                    "device_name": device,
+                    "current_fill": fill_now,
+                    "status": msg
+                })
+
+        # 상위 6개만 반환
+        top6 = sorted(predictions, key=lambda x: x["current_fill"], reverse=True)[:6]
+        return Response(top6, status=status.HTTP_200_OK)
