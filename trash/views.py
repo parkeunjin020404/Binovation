@@ -193,29 +193,47 @@ class RouteRecommendationView(APIView):
                         "fill_percent": fill
                     })
 
-            # 출발점 추가
-            if not any(b["device_name"] == device_name for b in bins):
-                bins.insert(0, {"device_name": device_name, "fill_percent": 0})
+            # 출발점 제외, fill 0 생략
+            bins = [b for b in bins if b["fill_percent"] > 0]
 
-            start_bin = next(b for b in bins if b["device_name"] == device_name)
-            remaining = [b for b in bins if b["device_name"] != device_name]
+            # 최대 6개 제한
+            bins = sorted(bins, key=lambda b: b["fill_percent"], reverse=True)[:6]
 
-            route = [start_bin]
-            while remaining:
-                current = route[-1]
-                next_bin = min(remaining, key=lambda b: calc_travel_time(current, b))
-                route.append(next_bin)
-                remaining.remove(next_bin)
+            # 건물 매핑
+            building_map = {
+                'Lib': '도서관',
+                'SocSci': '사회과학관',
+                'Human': '인문관',
+                'Cyber': '사이버관',
+                'EDU': '교수개발원'
+            }
 
-            result = [
-                {
-                    "device_name": b["device_name"],
-                    "fill_percent": b["fill_percent"],
-                    "order": i + 1
-                }
-                for i, b in enumerate(route)
-            ]
-            return Response(result)
+            from collections import defaultdict, OrderedDict
+            building_floors = defaultdict(list)
+
+            for b in bins:
+                building, floor = b['device_name'].split('_floor')
+                floor = int(floor)
+                building_floors[building].append(floor)
+
+            # 순서 유지하면서 문자열 조립
+            ordered_buildings = list(OrderedDict.fromkeys([b['device_name'].split('_')[0] for b in bins]))
+            recommended_route = ' → '.join([building_map.get(b, b) for b in ordered_buildings])
+
+            details = []
+            for b in ordered_buildings:
+                floors = sorted(building_floors[b], reverse=True)
+                label = ' → '.join([f"{floor}층" for floor in floors])
+                details.append(f"{building_map.get(b, b)} {label}")
+
+            estimated_time = f"{len(ordered_buildings) * 5}분"
+
+            return Response({
+                "recommended_route": recommended_route,
+                "estimated_time": estimated_time,
+                "total_bins": len(bins),
+                "details": details
+            })
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
