@@ -193,23 +193,36 @@ class RouteRecommendationView(APIView):
                         "fill_percent": fill
                     })
 
-            # 출발점 정보 확보 및 제외된 나머지로 필터링
-            start_bin = {
-                "device_name": device_name,
-                "fill_percent": 0
-            }
+            # 출발점 건물 추출
+            start_building = device_name.split('_')[0]
 
-            remaining = [b for b in all_bins if b["device_name"] != device_name]
+            # 동일 건물 먼저 분리
+            same_building_bins = [b for b in all_bins if b["device_name"].startswith(start_building)]
+            other_bins = [b for b in all_bins if not b["device_name"].startswith(start_building)]
 
-            # 경로 계산: 출발점부터 가까운 순서대로 최대 6개
+            start_bin = next((b for b in same_building_bins if b["device_name"] == device_name), None)
+            if not start_bin:
+                start_bin = {"device_name": device_name, "fill_percent": 0}
+                same_building_bins.insert(0, start_bin)
+
             route = [start_bin]
-            while remaining and len(route) < 7:  # 출발점 포함 6개까지만
-                current = route[-1]
-                next_bin = min(remaining, key=lambda b: calc_travel_time(current, b))
-                route.append(next_bin)
-                remaining.remove(next_bin)
+            visited = {start_bin["device_name"]}
 
-            route = route[1:]  # 출발점 제거 (fill_percent = 0인 경우 생략)
+            for b in same_building_bins:
+                if b["device_name"] not in visited and len(route) < 6:
+                    route.append(b)
+                    visited.add(b["device_name"])
+
+            while other_bins and len(route) < 6:
+                current = route[-1]
+                next_bin = min(other_bins, key=lambda b: calc_travel_time(current, b))
+                if next_bin["device_name"] not in visited:
+                    route.append(next_bin)
+                    visited.add(next_bin["device_name"])
+                other_bins.remove(next_bin)
+
+            if start_bin["fill_percent"] == 0:
+                route = route[1:]  # 출발점이 가짜인 경우 생략
 
             # 건물 매핑
             building_map = {
@@ -220,7 +233,7 @@ class RouteRecommendationView(APIView):
                 'EDU': '교수개발원'
             }
 
-            from collections import defaultdict, OrderedDict
+            from collections import defaultdict
             building_floors = defaultdict(list)
 
             for b in route:
@@ -229,7 +242,14 @@ class RouteRecommendationView(APIView):
                     floor = int(floor)
                     building_floors[building].append(floor)
 
-            ordered_buildings = list(OrderedDict.fromkeys([b['device_name'].split('_')[0] for b in route]))
+            ordered_buildings = []
+            seen = set()
+            for b in route:
+                building = b['device_name'].split('_')[0]
+                if building not in seen:
+                    seen.add(building)
+                    ordered_buildings.append(building)
+
             recommended_route = ' → '.join([building_map.get(b, b) for b in ordered_buildings])
 
             details = []
@@ -249,6 +269,8 @@ class RouteRecommendationView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
         
 class WeeklyAverageAllDevicesView(APIView):
     def get(self, request):
