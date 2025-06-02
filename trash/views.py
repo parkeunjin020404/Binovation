@@ -201,9 +201,15 @@ class RouteRecommendationView(APIView):
 
             remaining = [b for b in all_bins if b["device_name"] != device_name]
 
-            # 거리 기반 정렬 (최대 6개)
-            sorted_bins = sorted(remaining, key=lambda b: calc_travel_time(start_bin, b))[:6]
-            route = sorted_bins
+            # 경로 계산: 출발점부터 가까운 순서대로 최대 6개
+            route = [start_bin]
+            while remaining and len(route) < 7:  # 출발점 포함 6개까지만
+                current = route[-1]
+                next_bin = min(remaining, key=lambda b: calc_travel_time(current, b))
+                route.append(next_bin)
+                remaining.remove(next_bin)
+
+            route = route[1:]  # 출발점 제거 (fill_percent = 0인 경우 생략)
 
             # 건물 매핑
             building_map = {
