@@ -178,7 +178,7 @@ class RouteRecommendationView(APIView):
                 .annotate(latest=Max('date_time'))
             )
 
-            bins = []
+            all_bins = []
             for row in latest:
                 entry = TrashStatus.objects.filter(
                     device_name=row['device_name'],
@@ -188,16 +188,22 @@ class RouteRecommendationView(APIView):
                     continue
                 fill = calc_fill(entry.distance)
                 if fill is not None and fill >= 80:
-                    bins.append({
+                    all_bins.append({
                         "device_name": entry.device_name,
                         "fill_percent": fill
                     })
 
-            # 출발점 제외, fill 0 생략
-            bins = [b for b in bins if b["fill_percent"] > 0]
+            # 출발점 정보 확보 및 제외된 나머지로 필터링
+            start_bin = next((b for b in all_bins if b["device_name"] == device_name), None)
+            if not start_bin:
+                start_bin = {"device_name": device_name, "fill_percent": 0}
 
-            # 최대 6개 제한
-            bins = sorted(bins, key=lambda b: b["fill_percent"], reverse=True)[:6]
+            remaining = [b for b in all_bins if b["device_name"] != device_name]
+
+            # 거리 기반 정렬 (최대 6개)
+            remaining = sorted(remaining, key=lambda b: calc_travel_time(start_bin, b))[:5]  # 5개 + 출발점 = 6개
+
+            route = [start_bin] + remaining
 
             # 건물 매핑
             building_map = {
@@ -211,13 +217,13 @@ class RouteRecommendationView(APIView):
             from collections import defaultdict, OrderedDict
             building_floors = defaultdict(list)
 
-            for b in bins:
-                building, floor = b['device_name'].split('_floor')
-                floor = int(floor)
-                building_floors[building].append(floor)
+            for b in route:
+                if '_floor' in b['device_name']:
+                    building, floor = b['device_name'].split('_floor')
+                    floor = int(floor)
+                    building_floors[building].append(floor)
 
-            # 순서 유지하면서 문자열 조립
-            ordered_buildings = list(OrderedDict.fromkeys([b['device_name'].split('_')[0] for b in bins]))
+            ordered_buildings = list(OrderedDict.fromkeys([b['device_name'].split('_')[0] for b in route]))
             recommended_route = ' → '.join([building_map.get(b, b) for b in ordered_buildings])
 
             details = []
@@ -231,7 +237,7 @@ class RouteRecommendationView(APIView):
             return Response({
                 "recommended_route": recommended_route,
                 "estimated_time": estimated_time,
-                "total_bins": len(bins),
+                "total_bins": len(route),
                 "details": details
             })
 
