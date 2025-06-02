@@ -194,16 +194,16 @@ class RouteRecommendationView(APIView):
                     })
 
             # 출발점 정보 확보 및 제외된 나머지로 필터링
-            start_bin = next((b for b in all_bins if b["device_name"] == device_name), None)
-            if not start_bin:
-                start_bin = {"device_name": device_name, "fill_percent": 0}
+            start_bin = {
+                "device_name": device_name,
+                "fill_percent": 0
+            }
 
             remaining = [b for b in all_bins if b["device_name"] != device_name]
 
             # 거리 기반 정렬 (최대 6개)
-            remaining = sorted(remaining, key=lambda b: calc_travel_time(start_bin, b))[:5]  # 5개 + 출발점 = 6개
-
-            route = [start_bin] + remaining
+            sorted_bins = sorted(remaining, key=lambda b: calc_travel_time(start_bin, b))[:6]
+            route = sorted_bins
 
             # 건물 매핑
             building_map = {
