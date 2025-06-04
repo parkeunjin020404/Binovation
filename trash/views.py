@@ -1,9 +1,9 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import TrashStatus
+from .models import *
 from django.db.models import Avg
-from .serializers import TrashStatusSerializer
+from .serializers import *
 from django.db.models.functions import TruncDate
 import datetime
 from django.db.models.functions import ExtractHour
@@ -391,3 +391,5 @@ class EmergencyAlertView(APIView):
 
         top6 = sorted(bins, key=lambda x: x["current_fill"], reverse=True)[:6]
         return Response(top6, status=status.HTTP_200_OK)
+    
+

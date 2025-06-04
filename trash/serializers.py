@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import TrashStatus
+from .models import *
 from datetime import datetime
 
 class TrashStatusSerializer(serializers.ModelSerializer):
@@ -16,3 +16,9 @@ class TrashStatusSerializer(serializers.ModelSerializer):
         except Exception:
             raise serializers.ValidationError("Invalid datetime format")
         return super().to_internal_value(data)
+
+
+class ComplaintSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Complaint
+        fields = '__all__'
