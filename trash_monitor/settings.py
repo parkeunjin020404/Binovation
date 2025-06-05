@@ -74,7 +74,7 @@ TEMPLATES = [
 WSGI_APPLICATION = "trash_monitor.wsgi.application"
 from decouple import config
 
-FCM_SERVER_KEY = config('FCM_SERVER_KEY')
+#FCM_SERVER_KEY = config('FCM_SERVER_KEY')
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
