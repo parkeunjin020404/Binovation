@@ -1,4 +1,7 @@
 # trash/utils.py
+from pyfcm import FCMNotification
+from django.conf import settings
+from .models import DeviceToken
 
 building_name_map = {
     'Lib': '도서관',
@@ -45,3 +48,16 @@ def calc_travel_time(bin1, bin2):
         return base + floor_gap
     except:
         return float('inf')
+
+def send_push_notification_to_ios(title, body):
+    tokens = DeviceToken.objects.values_list('token', flat=True)
+    if not tokens:
+        return
+
+    push_service = FCMNotification(api_key=settings.FCM_SERVER_KEY)
+    result = push_service.notify_multiple_devices(
+        registration_ids=list(tokens),
+        message_title=title,
+        message_body=body
+    )
+    print("🔥 FCM 응답:", result)
