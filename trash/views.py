@@ -391,7 +391,11 @@ class EmergencyAlertView(APIView):
 
         top6 = sorted(bins, key=lambda x: x["current_fill"], reverse=True)[:6]
         return Response(top6, status=status.HTTP_200_OK)
-    
+      
+
+
+
+
 
 class DeviceTokenView(APIView):
     def post(self, request):
