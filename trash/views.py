@@ -393,3 +393,25 @@ class EmergencyAlertView(APIView):
         return Response(top6, status=status.HTTP_200_OK)
     
 
+class DeviceTokenView(APIView):
+    def post(self, request):
+        serializer = DeviceTokenSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "토큰 저장됨"}, status=201)
+        return Response(serializer.errors, status=400)
+    
+class ComplaintView(APIView):
+    def post(self, request):
+        serializer = ComplaintSerializer(data=request.data)
+        if serializer.is_valid():
+            complaint = serializer.save()
+
+            # ✅ 민원 저장 후 알림 보내기
+            send_push_notification_to_ios(
+                title="민원 접수됨",
+                body=f"{complaint.building} {complaint.floor}층: {complaint.content[:30]}"
+            )
+
+            return Response({"message": "민원이 접수되었습니다."}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
