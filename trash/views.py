@@ -11,6 +11,13 @@ from django.db.models import OuterRef, Subquery
 from django.db.models import Max
 from datetime import datetime, timedelta
 from .utils import *
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.db.models import Q
+from datetime import datetime, timedelta
+from .models import TrashStatus
+
 class TrashStatusView(APIView):
     def post(self, request):
         # 리스트로 온 경우: many=True
@@ -419,3 +426,73 @@ class ComplaintView(APIView):
 
             return Response({"message": "민원이 접수되었습니다."}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+class AllBuildingsUsageStatsView(APIView):
+    def get(self, request):
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+
+        try:
+            start = datetime.strptime(start_date, '%Y-%m-%d') if start_date else datetime.now() - timedelta(days=7)
+            end = datetime.strptime(end_date, '%Y-%m-%d') if end_date else datetime.now()
+        except ValueError:
+            return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
+
+        buildings = ['Lib', 'EDU', 'Human', 'SocSci', 'Cyber']
+        max_d = 65.0
+        min_d = 10.0
+        fill_threshold = 90.0
+        empty_threshold = 10.0
+
+        def calc_fill(distance):
+            return max(0, min(100, round((max_d - distance) / (max_d - min_d) * 100)))
+
+        from collections import defaultdict, Counter
+
+        results = []
+
+        for building in buildings:
+            qs = TrashStatus.objects.filter(
+                device_name__startswith=building,
+                date_time__date__range=(start.date(), end.date())
+            ).order_by('device_name', 'date_time')
+
+            if not qs.exists():
+                results.append({
+                    "building": building,
+                    "avg_empty_per_day": 0,
+                    "most_frequent_hour": None
+                })
+                continue
+
+            empty_counts_by_day = defaultdict(int)
+            hour_counter = Counter()
+            prev_fill = {}
+
+            for record in qs:
+                device = record.device_name
+                date = record.date_time.date()
+                hour = record.date_time.hour
+                fill = calc_fill(record.distance)
+
+                prev = prev_fill.get(device)
+                if prev is not None:
+                    prev_fill_percent = calc_fill(prev.distance)
+                    if prev_fill_percent >= fill_threshold and fill <= empty_threshold:
+                        empty_counts_by_day[date] += 1
+                prev_fill[device] = record
+
+                if fill >= fill_threshold:
+                    hour_counter[hour] += 1
+
+            total_days = (end.date() - start.date()).days + 1
+            avg_empty = round(sum(empty_counts_by_day.values()) / total_days, 2)
+            most_frequent_hour = hour_counter.most_common(1)[0][0] if hour_counter else None
+
+            results.append({
+                "building": building,
+                "avg_empty_per_day": avg_empty,
+                "most_frequent_hour": most_frequent_hour
+            })
+
+        return Response(results)
