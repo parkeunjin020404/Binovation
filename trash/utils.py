@@ -1,8 +1,8 @@
 # trash/utils.py
 from pyfcm import FCMNotification
 from django.conf import settings
-from .models import DeviceToken
-
+from .models import DeviceToken, Alert
+from .fcm import *
 building_name_map = {
     'Lib': '도서관',
     'SocSci': '사회과학관',
@@ -49,15 +49,16 @@ def calc_travel_time(bin1, bin2):
     except:
         return float('inf')
 
-def send_push_notification_to_ios(title, body):
-    tokens = DeviceToken.objects.values_list('token', flat=True)
-    if not tokens:
-        return
 
-    push_service = FCMNotification(api_key=settings.FCM_SERVER_KEY)
-    result = push_service.notify_multiple_devices(
-        registration_ids=list(tokens),
-        message_title=title,
-        message_body=body
+def create_full_bin_alert(device_name, fill_percent):
+    title = f"{device_name} 쓰레기통이 {fill_percent}% 찼습니다"
+    message = "30분 내 수거가 필요합니다!"
+
+    Alert.objects.create(
+        title=title,
+        message=message,
+        category="푸시",
+        is_sent=True
     )
-    print("🔥 FCM 응답:", result)
+
+    send_push_notification_to_ios(title, message, category="push")
