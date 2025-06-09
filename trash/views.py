@@ -404,29 +404,7 @@ class EmergencyAlertView(APIView):
 
 
 
-class DeviceTokenView(APIView):
-    def post(self, request):
-        serializer = DeviceTokenSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "토큰 저장됨"}, status=201)
-        return Response(serializer.errors, status=400)
-    
-class ComplaintView(APIView):
-    def post(self, request):
-        serializer = ComplaintSerializer(data=request.data)
-        if serializer.is_valid():
-            complaint = serializer.save()
 
-            # ✅ 민원 저장 후 알림 보내기
-            send_push_notification_to_ios(
-                title="민원 접수됨",
-                body=f"{complaint.building} {complaint.floor}층: {complaint.content[:30]}"
-            )
-
-            return Response({"message": "민원이 접수되었습니다."}, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
 class AllBuildingsUsageStatsView(APIView):
     def get(self, request):
         start_date = request.query_params.get('start_date')
@@ -496,3 +474,43 @@ class AllBuildingsUsageStatsView(APIView):
             })
 
         return Response(results)
+    
+
+from .models import Alert
+from .fcm import send_push_notification_to_ios 
+
+class DeviceTokenView(APIView):
+    def post(self, request):
+        serializer = DeviceTokenSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "토큰 저장됨"}, status=201)
+        return Response(serializer.errors, status=400)
+    
+class ComplaintView(APIView):
+    def post(self, request):
+        serializer = ComplaintSerializer(data=request.data)
+        if serializer.is_valid():
+            complaint = serializer.save()
+
+            title = "민원 접수됨"
+            body = f"{complaint.building} {complaint.floor}층 쓰레기통 “{complaint.content[:30]}” 민원 접수!"
+
+            # ✅ 알림 저장
+            Alert.objects.create(title=title, message=body, category="민원", is_sent=True)
+
+            # ✅ 푸시 전송
+            send_push_notification_to_ios(title, body)
+
+            return Response({"message": "민원이 접수되었습니다."}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class AlertListView(APIView):
+    def get(self, request):
+        category = request.GET.get('category')  # '민원' or '푸시'
+        if category not in ['푸시', '민원']:
+            return Response({"error": "잘못된 category"}, status=400)
+
+        alerts = Alert.objects.filter(category=category).order_by('-created_at')
+        serializer = AlertSerializer(alerts, many=True)
+        return Response(serializer.data)
