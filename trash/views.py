@@ -20,13 +20,24 @@ from .models import TrashStatus
 
 class TrashStatusView(APIView):
     def post(self, request):
-        # 리스트로 온 경우: many=True
         is_many = isinstance(request.data, list)
-
         serializer = TrashStatusSerializer(data=request.data, many=is_many)
+
         if serializer.is_valid():
-            serializer.save()
+            instances = serializer.save()  # 저장된 TrashStatus 객체들 반환
+
+            # 리스트 or 단건 모두 처리
+            if not is_many:
+                instances = [instances]
+
+            for instance in instances:
+                fill = calc_fill(instance.distance)
+
+                if fill >= 80:
+                    create_full_bin_alert(instance.device_name, fill)
+
             return Response({"message": "Data saved successfully"}, status=status.HTTP_201_CREATED)
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class TrashStatusLatestView(APIView):
@@ -400,11 +411,6 @@ class EmergencyAlertView(APIView):
         return Response(top6, status=status.HTTP_200_OK)
       
 
-
-
-
-
-
 class AllBuildingsUsageStatsView(APIView):
     def get(self, request):
         start_date = request.query_params.get('start_date')
@@ -514,3 +520,11 @@ class AlertListView(APIView):
         alerts = Alert.objects.filter(category=category).order_by('-created_at')
         serializer = AlertSerializer(alerts, many=True)
         return Response(serializer.data)
+
+class AlertClearView(APIView):
+    def delete(self, request, category):
+        if category not in ['푸시', '민원']:
+            return Response({"error": "잘못된 category입니다"}, status=400)
+
+        deleted_count, _ = Alert.objects.filter(category=category).delete()
+        return Response({"message": f"{category} 알림 {deleted_count}개 삭제됨"}, status=status.HTTP_200_OK)
