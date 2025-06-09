@@ -12,5 +12,8 @@ urlpatterns = [
     path('device-token/', DeviceTokenView.as_view(), name='device-token'),
     path('api/building-usage-stats/', AllBuildingsUsageStatsView.as_view(), name='all-building-usage-stats'),
     path('route/<str:device_name>/', RouteRecommendationView.as_view(), name='route'),
+    path('complaint/', ComplaintView.as_view(), name='complaint'),
+    path('device-token/', DeviceTokenView.as_view(), name='device-token'),
+    path('alerts/', AlertListView.as_view(), name='alert-list'),
     path('<str:device_name>/', TrashStatusLatestView.as_view(), name='latest_status'),  # ← 이건 맨 아래!
 ]
