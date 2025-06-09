@@ -27,3 +27,14 @@ class DeviceToken(models.Model):
         return self.token
     
 
+# models.py
+class Alert(models.Model):
+    CATEGORY_CHOICES = [
+        ('푸시', '푸시'),
+        ('민원', '민원'),
+    ]
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    category = models.CharField(max_length=10, choices=CATEGORY_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_sent = models.BooleanField(default=False)
