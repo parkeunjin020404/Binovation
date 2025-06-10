@@ -14,7 +14,7 @@ urlpatterns = [
     path('route/<str:device_name>/', RouteRecommendationView.as_view(), name='route'),
     path('complaint/', ComplaintView.as_view(), name='complaint'),
     path('device-token/', DeviceTokenView.as_view(), name='device-token'),
-    path('alerts/', AlertListView.as_view(), name='alert-list'),
+    path('alerts/<str:category>/', AlertListView.as_view(), name='alert-list'),
     path('alerts/clear/<str:category>/', AlertClearView.as_view(), name='alert-clear'),
-    path('<str:device_name>/', TrashStatusLatestView.as_view(), name='latest_status'),  # ← 이건 맨 아래!
+    path('<str:device_name>/', TrashStatusLatestView.as_view(), name='latest_status'), 
 ]
