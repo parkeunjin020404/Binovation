@@ -33,8 +33,11 @@ class TrashStatusView(APIView):
             for instance in instances:
                 fill = calc_fill(instance.distance)
 
-                if fill >= 80:
-                    create_full_bin_alert(instance.device_name, fill)
+                if fill >= 100:
+                    create_full_bin_alert(instance.device_name, fill_level="위험")
+                elif fill >= 80:
+                    create_full_bin_alert(instance.device_name, fill_level="경고")
+
 
             return Response({"message": "Data saved successfully"}, status=status.HTTP_201_CREATED)
 
@@ -512,8 +515,7 @@ class ComplaintView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class AlertListView(APIView):
-    def get(self, request):
-        category = request.GET.get('category')  # '민원' or '푸시'
+    def get(self, request, category):
         if category not in ['푸시', '민원']:
             return Response({"error": "잘못된 category"}, status=400)
 

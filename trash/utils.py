@@ -50,9 +50,15 @@ def calc_travel_time(bin1, bin2):
         return float('inf')
 
 
-def create_full_bin_alert(device_name, fill_percent):
-    title = f"{device_name} 쓰레기통이 {fill_percent}% 찼습니다"
-    message = "30분 내 수거가 필요합니다!"
+def create_full_bin_alert(device_name, fill_level):
+    if fill_level == "위험":
+        title = f"⚠️ {device_name} 쓰레기통이 완전히 찼습니다"
+        message = "즉시 수거가 필요합니다!"
+    elif fill_level == "경고":
+        title = f"{device_name} 쓰레기통이 80% 이상 찼습니다"
+        message = "30분 내 수거를 추천합니다."
+    else:
+        return  # 잘못된 level이면 아무 것도 하지 않음
 
     Alert.objects.create(
         title=title,
