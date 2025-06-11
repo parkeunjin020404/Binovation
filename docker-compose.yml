@@ -1,8 +1,6 @@
 version: '3'
 services:
   web: # django 컨테이너
-    environment:
-      #- FCM_SERVER_KEY=630214320672
     image: server
     container_name: web
     command: bash -c "gunicorn trash_monitor.wsgi:application -b 0.0.0.0:8000" # 서버 실행
