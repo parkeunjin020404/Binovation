@@ -67,4 +67,7 @@ def create_full_bin_alert(device_name, fill_level):
         is_sent=True
     )
 
-    send_push_notification_to_ios(title, message, category="push")
+    tokens = DeviceToken.objects.values_list('token', flat=True)
+    for token in tokens:
+        send_push_notification_to_ios(token=token, title=title, body=message, category="푸시")
+
