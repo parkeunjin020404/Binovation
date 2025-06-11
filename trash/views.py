@@ -496,6 +496,8 @@ class DeviceTokenView(APIView):
             return Response({"message": "토큰 저장됨"}, status=201)
         return Response(serializer.errors, status=400)
     
+from .models import DeviceToken
+
 class ComplaintCreateView(APIView):
     def post(self, request):
         try:
@@ -503,19 +505,24 @@ class ComplaintCreateView(APIView):
             if serializer.is_valid():
                 serializer.save()
 
-                # FCM 전송
-                send_push_notification_to_ios(
-                    title="민원 접수됨",
-                    body="해당 쓰레기통에 민원이 등록되었습니다.",
-                    category="민원"
-                )
+                # 🔥 여기에 token 리스트 불러오기
+                tokens = DeviceToken.objects.values_list('token', flat=True)
+
+                for token in tokens:
+                    send_push_notification_to_ios(
+                        token=token,
+                        title="민원 접수됨",
+                        body="해당 쓰레기통에 민원이 등록되었습니다.",
+                        category="민원"
+                    )
 
                 return Response({"message": "Complaint registered"}, status=status.HTTP_201_CREATED)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
+
         except Exception as e:
-            print("🔥 Complaint POST 처리 중 에러 발생:", str(e))  # docker logs에 찍히도록
+            print("🔥 Complaint POST 처리 중 에러 발생:", str(e))
             return Response({"error": "Internal Server Error", "details": str(e)}, status=500)
+
 
 
 class AlertListView(APIView):
