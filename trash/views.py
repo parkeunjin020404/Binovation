@@ -20,28 +20,32 @@ from .models import TrashStatus
 
 class TrashStatusView(APIView):
     def post(self, request):
-        is_many = isinstance(request.data, list)
-        serializer = TrashStatusSerializer(data=request.data, many=is_many)
+        try:
+            is_many = isinstance(request.data, list)
+            serializer = TrashStatusSerializer(data=request.data, many=is_many)
 
-        if serializer.is_valid():
-            instances = serializer.save()  # 저장된 TrashStatus 객체들 반환
+            if serializer.is_valid():
+                instances = serializer.save()
 
-            if not is_many:
-                instances = [instances]
+                if not is_many:
+                    instances = [instances]
 
-            for instance in instances:
-                fill = calc_fill(instance.distance)
+                for instance in instances:
+                    fill = calc_fill(instance.distance)
 
-                if fill >= 100:
-                    create_full_bin_alert(instance.device_name, fill_level="위험")
-                elif fill >= 80:
-                    create_full_bin_alert(instance.device_name, fill_level="경고")
+                    if fill >= 100:
+                        create_full_bin_alert(instance.device_name, fill_level="위험")
+                    elif fill >= 80:
+                        create_full_bin_alert(instance.device_name, fill_level="경고")
 
-            return Response({"message": "Data saved successfully"}, status=status.HTTP_201_CREATED)
-        else:
-            # 에러 로그 출력
-            print("Serializer validation errors:", serializer.errors)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"message": "Data saved successfully"}, status=status.HTTP_201_CREATED)
+            else:
+                print("Serializer validation errors:", serializer.errors)
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            print(f"🔥 Error in TrashStatusView POST: {e}")
+            return Response({"error": "Internal Server Error", "details": str(e)}, status=500)
 
 class TrashStatusLatestView(APIView):
     def get(self, request, device_name):
