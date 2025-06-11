@@ -26,7 +26,6 @@ class TrashStatusView(APIView):
         if serializer.is_valid():
             instances = serializer.save()  # 저장된 TrashStatus 객체들 반환
 
-            # 리스트 or 단건 모두 처리
             if not is_many:
                 instances = [instances]
 
@@ -38,10 +37,11 @@ class TrashStatusView(APIView):
                 elif fill >= 80:
                     create_full_bin_alert(instance.device_name, fill_level="경고")
 
-
             return Response({"message": "Data saved successfully"}, status=status.HTTP_201_CREATED)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            # 에러 로그 출력
+            print("Serializer validation errors:", serializer.errors)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class TrashStatusLatestView(APIView):
     def get(self, request, device_name):

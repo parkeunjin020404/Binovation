@@ -166,7 +166,7 @@ dmypy.json
 cython_debug/
 
 .DS_Store
-
+bin_key.pem
 myvenv/
 binovation-3ae58-dff2c962d61b.json
 # PyCharm
