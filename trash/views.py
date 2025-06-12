@@ -527,7 +527,11 @@ class ComplaintCreateView(APIView):
             print("🔥 Complaint POST 처리 중 에러 발생:", str(e))
             return Response({"error": "Internal Server Error", "details": str(e)}, status=500)
 
-
+class ComplaintListView(APIView):
+    def get(self, request):
+        complaints = Complaint.objects.order_by('-created_at')  # 최신순 정렬
+        serializer = ComplaintSerializer(complaints, many=True)
+        return Response(serializer.data)
 
 class AlertListView(APIView):
     def get(self, request, category):
