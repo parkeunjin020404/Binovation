@@ -13,6 +13,7 @@ urlpatterns = [
     path('api/building-usage-stats/', AllBuildingsUsageStatsView.as_view(), name='all-building-usage-stats'),
     path('route/<str:device_name>/', RouteRecommendationView.as_view(), name='route'),
     path('complaint/', ComplaintCreateView.as_view(), name='complaint'),
+    path('complaintlist/', ComplaintListView.as_view(), name='complaint-list'),
     path('device-token/', DeviceTokenView.as_view(), name='device-token'),
     path('alerts/<str:category>/', AlertListView.as_view(), name='alert-list'),
     path('alerts/clear/<str:category>/', AlertClearView.as_view(), name='alert-clear'),
