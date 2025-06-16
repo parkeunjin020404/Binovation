@@ -556,3 +556,41 @@ class AlertClearView(APIView):
 
         deleted_count, _ = Alert.objects.filter(category=category).delete()
         return Response({"message": f"{category} 알림 {deleted_count}개 삭제됨"}, status=status.HTTP_200_OK)
+    
+class PushAlertListView(APIView):
+    def get(self, request):
+        latest_data = (
+            TrashStatus.objects
+            .values('device_name')
+            .annotate(latest_time=Max('date_time'))
+        )
+
+        alerts = []
+        for row in latest_data:
+            entry = TrashStatus.objects.filter(
+                device_name=row['device_name'],
+                date_time=row['latest_time']
+            ).first()
+
+            if not entry:
+                continue
+
+            d = entry.distance
+            if d <= 10 or d >= 800:
+                fill_raw = 100
+            else:
+                fill_raw = ((65 - d) / (65 - 10)) * 100
+
+            fill = int(fill_raw // 10) * 10
+
+            if fill >= 80:
+                message = "지금 수거하세요" if fill == 100 else "30분 이내에 수거해 주세요!"
+                alerts.append({
+                    "device_name": entry.device_name,
+                    "current_fill": fill,
+                    "message": message,
+                    "created_at": entry.date_time
+                })
+
+        alerts_sorted = sorted(alerts, key=lambda x: x['created_at'], reverse=True)
+        return Response(alerts_sorted, status=status.HTTP_200_OK)
