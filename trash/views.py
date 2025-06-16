@@ -539,6 +539,9 @@ class ComplaintListView(APIView):
         complaints = Complaint.objects.order_by('-created_at')  # 최신순 정렬
         serializer = ComplaintSerializer(complaints, many=True)
         return Response(serializer.data)
+    def delete(self, request):
+        deleted_count, _ = Complaint.objects.all().delete()
+        return Response({"message": f"민원 {deleted_count}개가 모두 삭제되었습니다."}, status=status.HTTP_200_OK)
 
 class AlertListView(APIView):
     def get(self, request, category):
