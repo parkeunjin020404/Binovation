@@ -401,24 +401,22 @@ class EmergencyAlertView(APIView):
 
             d = entry.distance
             if d <= 10 or d >= 800:
-                fill = 100
+                fill_raw = 100
             else:
-                fill = round(((65 - d) / (65 - 10)) * 100, 1)
+                fill_raw = ((65 - d) / (65 - 10)) * 100
+
+            fill = int(fill_raw // 10) * 10
 
             if fill >= 80:
-                if fill == 100:
-                    message = "지금 수거하세요"
-                else:
-                    message = "30분 이내에 수거해 주세요!"
+                message = "지금 수거하세요" if fill == 100 else "30분 이내에 수거해 주세요!"
                 bins.append({
                     "device_name": entry.device_name,
                     "current_fill": fill,
-                    "message": message  # status -> message 변경
+                    "message": message,
                 })
 
-        top6 = sorted(bins, key=lambda x: x["current_fill"], reverse=True)[:6]
-        return Response(top6, status=status.HTTP_200_OK)
-      
+        bins_sorted = sorted(bins, key=lambda x: x['current_fill'], reverse=True)
+        return Response(bins_sorted[:6], status=status.HTTP_200_OK)
 
 class AllBuildingsUsageStatsView(APIView):
     def get(self, request):
