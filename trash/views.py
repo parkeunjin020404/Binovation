@@ -509,11 +509,18 @@ class ComplaintCreateView(APIView):
         try:
             serializer = ComplaintSerializer(data=request.data)
             if serializer.is_valid():
-                serializer.save()
+                complaint = serializer.save()
 
-                # 🔥 여기에 token 리스트 불러오기
+                # Alert 테이블에 저장
+                Alert.objects.create(
+                    title="민원 접수됨",
+                    message=f"{complaint.building} {complaint.floor}층에 민원이 등록되었습니다.",
+                    category="민원",
+                    is_sent=True
+                )
+
+                # 토큰 리스트 불러와서 푸시 전송
                 tokens = DeviceToken.objects.values_list('token', flat=True)
-
                 for token in tokens:
                     send_push_notification_to_ios(
                         token=token,
