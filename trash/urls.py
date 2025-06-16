@@ -17,5 +17,6 @@ urlpatterns = [
     path('device-token/', DeviceTokenView.as_view(), name='device-token'),
     path('alerts/<str:category>/', AlertListView.as_view(), name='alert-list'),
     path('alerts/clear/<str:category>/', AlertClearView.as_view(), name='alert-clear'),
+    path('pushalertslist/', PushAlertListView.as_view(), name='push-alert'),
     path('<str:device_name>/', TrashStatusLatestView.as_view(), name='latest_status'), 
 ]
