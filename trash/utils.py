@@ -51,17 +51,20 @@ def calc_travel_time(bin1, bin2):
 
 
 def create_full_bin_alert(device_name, fill_level):
-    building_code = device_name.split('_')[0]
-    building_name = building_name_map.get(building_code, device_name)  # 매핑 없으면 원래 이름 사용
+    parts = device_name.split('_floor')
+    building_code = parts[0]
+    floor = parts[1] if len(parts) > 1 else ""
+
+    building_name = building_name_map.get(building_code, building_code)
 
     if fill_level == "위험":
-        title = f"⚠️ {building_name} 쓰레기통이 완전히 찼습니다"
+        title = f"⚠️ {building_name} {floor}층 쓰레기통이 완전히 찼습니다"
         message = "즉시 수거가 필요합니다!"
     elif fill_level == "경고":
-        title = f"{building_name} 쓰레기통이 80% 이상 찼습니다"
+        title = f"{building_name} {floor}층 쓰레기통이 80% 이상 찼습니다"
         message = "30분 내 수거를 추천합니다."
     else:
-        return  # fill_level 이상하면 알림 안 만듦
+        return  # 잘못된 level인 경우
 
     Alert.objects.create(
         title=title,
@@ -70,7 +73,6 @@ def create_full_bin_alert(device_name, fill_level):
         is_sent=True
     )
 
-    # 푸시 토큰 리스트 가져와서 푸시 알림 보내기
     tokens = DeviceToken.objects.values_list('token', flat=True)
     for token in tokens:
         send_push_notification_to_ios(
