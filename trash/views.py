@@ -221,10 +221,16 @@ class RouteRecommendationView(APIView):
             # 출발점 건물 추출
             start_building = device_name.split('_')[0]
 
-            # 동일 건물 먼저 분리
-            same_building_bins = [b for b in all_bins if b["device_name"].startswith(start_building)]
+            # 같은 건물 쓰레기통 층 기준 오름차순 정렬
+            same_building_bins = sorted(
+                [b for b in all_bins if b["device_name"].startswith(start_building)],
+                key=lambda b: int(b["device_name"].split('_floor')[1])
+            )
+            
+            # 다른 건물 쓰레기통
             other_bins = [b for b in all_bins if not b["device_name"].startswith(start_building)]
 
+            # 출발점 찾기, 없으면 임시 생성 후 리스트 앞에 넣기
             start_bin = next((b for b in same_building_bins if b["device_name"] == device_name), None)
             if not start_bin:
                 start_bin = {"device_name": device_name, "fill_percent": 0}
@@ -233,11 +239,13 @@ class RouteRecommendationView(APIView):
             route = [start_bin]
             visited = {start_bin["device_name"]}
 
+            # 출발점 다음부터 같은 건물 층 순서대로 추가
             for b in same_building_bins:
                 if b["device_name"] not in visited and len(route) < 6:
                     route.append(b)
                     visited.add(b["device_name"])
 
+            # 나머지 다른 건물은 calc_travel_time 기준으로 가까운 순서대로 추가
             while other_bins and len(route) < 6:
                 current = route[-1]
                 next_bin = min(other_bins, key=lambda b: calc_travel_time(current, b))
@@ -246,10 +254,11 @@ class RouteRecommendationView(APIView):
                     visited.add(next_bin["device_name"])
                 other_bins.remove(next_bin)
 
+            # 출발점이 가짜면 제외
             if start_bin["fill_percent"] == 0:
-                route = route[1:]  # 출발점이 가짜인 경우 생략
+                route = route[1:]
 
-            # 건물 매핑
+            # 건물 이름 매핑 및 층별 정리 (기존 코드 유지)
             building_map = {
                 'Lib': '도서관',
                 'SocSci': '사회과학관',
@@ -294,6 +303,7 @@ class RouteRecommendationView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
         
