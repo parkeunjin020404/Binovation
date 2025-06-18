@@ -194,74 +194,79 @@ from django.db.models import Max
 
 
 
+from collections import defaultdict
+from django.db.models import Max
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.views import APIView
+
 class RouteRecommendationView(APIView):
     def get(self, request, device_name):
         try:
-            latest = (
+            # 각 쓰레기통의 최신 상태 가져오기
+            latest_status = (
                 TrashStatus.objects
                 .values('device_name')
                 .annotate(latest=Max('date_time'))
             )
 
-            all_bins = []
-            for row in latest:
+            # 쓰레기통 상태 조회 및 필터링
+            filled_bins = []
+            for row in latest_status:
                 entry = TrashStatus.objects.filter(
                     device_name=row['device_name'],
                     date_time=row['latest']
                 ).first()
-                if not entry:
-                    continue
-                fill = calc_fill(entry.distance)
-                if fill is not None and fill >= 80:
-                    all_bins.append({
-                        "device_name": entry.device_name,
-                        "fill_percent": fill
-                    })
+                
+                if entry:
+                    fill = calc_fill(entry.distance)
+                    if fill is not None and fill >= 80:
+                        filled_bins.append({
+                            "device_name": entry.device_name,
+                            "fill_percent": fill
+                        })
 
+            # 입력된 건물 기준으로 정렬
             start_building = device_name.split('_')[0]
+            same_building_bins = [b for b in filled_bins if b["device_name"].startswith(start_building)]
+            other_bins = [b for b in filled_bins if not b["device_name"].startswith(start_building)]
 
-            # 출발점이 있는 건물의 쓰레기통 모두 포함
-            same_building_bins = [b for b in all_bins if b["device_name"].startswith(start_building)]
-            other_bins = [b for b in all_bins if not b["device_name"].startswith(start_building)]
+            # 기준 건물에 찬 쓰레기통이 없으면 가장 가까운 곳부터 시작
+            if not same_building_bins:
+                nearest_bin = min(other_bins, key=lambda b: calc_travel_time({"device_name": device_name}, b))
+                start_building = nearest_bin["device_name"].split('_')[0]
+                same_building_bins = [b for b in filled_bins if b["device_name"].startswith(start_building)]
 
-            # 출발점 쓰레기통 포함 여부 확인 및 추가
-            start_bin = next((b for b in same_building_bins if b["device_name"] == device_name), None)
-            if not start_bin:
-                start_bin = {"device_name": device_name, "fill_percent": 0}
-                same_building_bins.insert(0, start_bin)
+            # 쓰레기통 수집 경로 설정
+            route = []
+            visited = set()
 
-            route = [start_bin]
-            visited = {start_bin["device_name"]}
+            # 건물별 층 정보 저장 후 높은 층부터 정렬
+            building_floors = defaultdict(list)
+            for bin_data in same_building_bins + other_bins:
+                if "_floor" in bin_data["device_name"]:
+                    building, floor = bin_data["device_name"].split('_floor')
+                    floor = int(floor)
+                    building_floors[building].append((floor, bin_data))
 
-            # 동일 건물 내 다른 층 쓰레기통 모두 포함
-            for b in same_building_bins:
-                if b["device_name"] not in visited and len(route) < 6:
-                    route.append(b)
-                    visited.add(b["device_name"])
+            # 경로 최적화: 높은 층부터 우선 포함하고, 최적 이동 경로 설정
+            for building, bins in building_floors.items():
+                bins.sort(reverse=True, key=lambda x: x[0])  # 높은 층 우선 정렬
+                for _, bin_data in bins:
+                    if bin_data["device_name"] not in visited and len(route) < 6:
+                        route.append(bin_data)
+                        visited.add(bin_data["device_name"])
 
-            # 다른 건물 쓰레기통도 가까운 순으로 최대 6개까지 포함
+            # 다른 건물 쓰레기통을 가까운 순으로 추가 (최대 6개)
             while other_bins and len(route) < 6:
-                current = route[-1]
-                next_bin = min(other_bins, key=lambda b: calc_travel_time(current, b))
+                current_bin = route[-1]
+                next_bin = min(other_bins, key=lambda b: calc_travel_time(current_bin, b))
                 if next_bin["device_name"] not in visited:
                     route.append(next_bin)
                     visited.add(next_bin["device_name"])
                 other_bins.remove(next_bin)
 
-            # 출발점이 가짜라면 제거
-            if start_bin["fill_percent"] == 0:
-                route = route[1:]
-
-            # 층 정보 포함해서 건물별로 층들을 모음
-            from collections import defaultdict
-            building_floors = defaultdict(set)
-
-            for b in route:
-                if '_floor' in b['device_name']:
-                    building, floor = b['device_name'].split('_floor')
-                    floor = int(floor)
-                    building_floors[building].add(floor)
-
+            # 건물 이름 매핑
             building_map = {
                 'Lib': '도서관',
                 'SocSci': '사회과학관',
@@ -278,15 +283,16 @@ class RouteRecommendationView(APIView):
                     seen.add(building)
                     ordered_buildings.append(building)
 
+            # 추천 경로 및 예상 시간 설정
             recommended_route = ' → '.join([building_map.get(b, b) for b in ordered_buildings])
-
-            details = []
-            for b in ordered_buildings:
-                floors = sorted(building_floors[b], reverse=True)
-                label = ' → '.join([f"{floor}층" for floor in floors])
-                details.append(f"{building_map.get(b, b)} {label}")
-
             estimated_time = f"{len(ordered_buildings) * 5}분"
+
+            # 상세 층 정보 포함
+            details = []
+            for building in ordered_buildings:
+                floors = sorted(building_floors[building], reverse=True)
+                label = ' → '.join([f"{floor}층" for floor, _ in floors])
+                details.append(f"{building_map.get(building, building)} {label}")
 
             return Response({
                 "recommended_route": recommended_route,
