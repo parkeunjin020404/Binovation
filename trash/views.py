@@ -194,6 +194,8 @@ from django.db.models import Max
 
 
 
+from collections import defaultdict
+
 class RouteRecommendationView(APIView):
     def get(self, request, device_name):
         try:
@@ -219,12 +221,9 @@ class RouteRecommendationView(APIView):
                     })
 
             start_building = device_name.split('_')[0]
-
-            # 출발점이 있는 건물의 쓰레기통 모두 포함
             same_building_bins = [b for b in all_bins if b["device_name"].startswith(start_building)]
             other_bins = [b for b in all_bins if not b["device_name"].startswith(start_building)]
 
-            # 출발점 쓰레기통 포함 여부 확인 및 추가
             start_bin = next((b for b in same_building_bins if b["device_name"] == device_name), None)
             if not start_bin:
                 start_bin = {"device_name": device_name, "fill_percent": 0}
@@ -233,13 +232,20 @@ class RouteRecommendationView(APIView):
             route = [start_bin]
             visited = {start_bin["device_name"]}
 
-            # 동일 건물 내 다른 층 쓰레기통 모두 포함
-            for b in same_building_bins:
+            # 같은 건물 내 쓰레기통은 층 높은 순서로 정렬 후 추가
+            def floor_key(bin):
+                if '_floor' in bin['device_name']:
+                    return int(bin['device_name'].split('_floor')[1])
+                return 0
+
+            same_building_bins_sorted = sorted(same_building_bins, key=floor_key, reverse=True)
+
+            for b in same_building_bins_sorted:
                 if b["device_name"] not in visited and len(route) < 6:
                     route.append(b)
                     visited.add(b["device_name"])
 
-            # 다른 건물 쓰레기통도 가까운 순으로 최대 6개까지 포함
+            # 다른 건물 쓰레기통은 가까운 순으로 최대 6개까지 추가
             while other_bins and len(route) < 6:
                 current = route[-1]
                 next_bin = min(other_bins, key=lambda b: calc_travel_time(current, b))
@@ -252,15 +258,13 @@ class RouteRecommendationView(APIView):
             if start_bin["fill_percent"] == 0:
                 route = route[1:]
 
-            # 층 정보 포함해서 건물별로 층들을 모음
-            from collections import defaultdict
-            building_floors = defaultdict(set)
-
+            # 층 정보 포함해서 건물별 층들을 모음
+            building_floors = defaultdict(list)
             for b in route:
                 if '_floor' in b['device_name']:
                     building, floor = b['device_name'].split('_floor')
                     floor = int(floor)
-                    building_floors[building].add(floor)
+                    building_floors[building].append(floor)
 
             building_map = {
                 'Lib': '도서관',
@@ -282,7 +286,7 @@ class RouteRecommendationView(APIView):
 
             details = []
             for b in ordered_buildings:
-                floors = sorted(building_floors[b], reverse=True)
+                floors = sorted(building_floors[b], reverse=True)  # 층 내림차순 정렬
                 label = ' → '.join([f"{floor}층" for floor in floors])
                 details.append(f"{building_map.get(b, b)} {label}")
 
@@ -297,6 +301,7 @@ class RouteRecommendationView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
